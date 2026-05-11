@@ -1,4 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+<!-- Add Internet permission here -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Optional: Add permission to check network state -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <application
         android:label="adoven"
         android:name="${applicationName}"

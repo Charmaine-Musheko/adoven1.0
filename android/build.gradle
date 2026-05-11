@@ -13,6 +13,33 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+def configureNamespaceFallback = { subproject ->
+    def androidExtension = subproject.extensions.findByName("android")
+    if (androidExtension == null || !androidExtension.hasProperty("namespace") || androidExtension.namespace != null) {
+        return
+    }
+
+    def manifestFile = androidExtension.sourceSets.main.manifest.srcFile
+    def manifestPackage = null
+    if (manifestFile != null && manifestFile.exists()) {
+        def matcher = manifestFile.getText("UTF-8") =~ /package="([^"]+)"/
+        if (matcher.find()) {
+            manifestPackage = matcher.group(1)
+        }
+    }
+
+    androidExtension.namespace = manifestPackage ?: subproject.group
+}
+
+subprojects { subproject ->
+    subproject.plugins.withId("com.android.application") {
+        configureNamespaceFallback(subproject)
+    }
+    subproject.plugins.withId("com.android.library") {
+        configureNamespaceFallback(subproject)
+    }
+}
+
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
