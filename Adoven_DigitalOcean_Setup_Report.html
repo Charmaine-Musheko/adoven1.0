@@ -1,0 +1,135 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Adoven DigitalOcean Data Setup Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.45; color: #1f2933; }
+    h1, h2 { color: #14342b; }
+    code { background: #eef2f7; padding: 2px 4px; border-radius: 4px; }
+    pre { background: #eef2f7; padding: 12px; border-radius: 6px; white-space: pre-wrap; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+    th, td { border: 1px solid #c8d1dc; padding: 8px; text-align: left; }
+    th { background: #eaf1ff; }
+  </style>
+</head>
+<body>
+  <h1>Adoven DigitalOcean Data Setup Report</h1>
+  <p><strong>Date:</strong> 2026-05-17</p>
+  <p><strong>Server:</strong> DigitalOcean Droplet <code>164.92.194.34</code></p>
+  <p><strong>Goal:</strong> Connect the Flutter Analytics page to real energy telemetry stored on the DigitalOcean Droplet.</p>
+
+  <h2>Starting Problem</h2>
+  <p>The Flutter app was trying to load API data from <code>https://localhost:7234/api</code>. That worked only for a local backend and failed from Safari/mobile because no API was running locally or publicly.</p>
+
+  <h2>What Was Found on the Droplet</h2>
+  <table>
+    <tr><th>Item</th><th>Value</th></tr>
+    <tr><td>Public IP</td><td>164.92.194.34</td></tr>
+    <tr><td>Operating system</td><td>Ubuntu 24.04.3 LTS</td></tr>
+    <tr><td>Running containers</td><td>mqtt, mqtt-bridge, mssql</td></tr>
+    <tr><td>Database engine</td><td>Microsoft SQL Server 2022 Docker container</td></tr>
+    <tr><td>Database</td><td>AdovenDB</td></tr>
+    <tr><td>Table</td><td>dbo.EnergyData</td></tr>
+    <tr><td>Device serial number</td><td>1AEHU6N8</td></tr>
+  </table>
+
+  <h2>Database Fields</h2>
+  <p>The SQL Server table <code>EnergyData</code> contains:</p>
+  <pre>ReadingID int
+DeviceSN varchar
+Voltage float
+Current float
+ActivePower float
+ImportEnergy float
+ExportEnergy float
+Timestamp datetime</pre>
+
+  <h2>Server/API Work Done</h2>
+  <ol>
+    <li>Installed .NET 8 SDK and Nginx on the Droplet.</li>
+    <li>Created a minimal ASP.NET Core API at <code>/opt/adoven-api/AdovenApi</code>.</li>
+    <li>Opened/used port <code>7234</code> for the test API.</li>
+    <li>Connected the API to SQL Server in Docker via <code>localhost,1433</code>.</li>
+    <li>Added the <code>Microsoft.Data.SqlClient</code> package.</li>
+    <li>Created <code>/api/analytics</code> to query real rows from <code>AdovenDB.dbo.EnergyData</code>.</li>
+  </ol>
+
+  <h2>Live API Endpoint</h2>
+  <p>The app now reads analytics data from:</p>
+  <pre>http://164.92.194.34:7234/api/analytics</pre>
+
+  <p>Example JSON returned:</p>
+  <pre>{
+  "devices": [
+    {
+      "deviceSn": "1AEHU6N8",
+      "provider": "Device 1AEHU6N8",
+      "category": "Electricity",
+      "activePower": 451,
+      "voltage": 230.77,
+      "current": 2.53,
+      "importEnergy": 553.83,
+      "exportEnergy": 0,
+      "kwhLast24h": 20.54,
+      "kwhLast30d": 336.34,
+      "averagePower24h": 853.93,
+      "peakPower24h": 5541,
+      "readingCount": 26995,
+      "estimatedCost": 840.85,
+      "lastUpdated": "2026-05-17T12:07:23.443"
+    }
+  ],
+  "bills": [
+    {
+      "provider": "Device 1AEHU6N8",
+      "category": "Electricity",
+      "amount": 840.85,
+      "usageLabel": "451 W now • 553.83 kWh imported",
+      "status": "due"
+    }
+  ],
+  "opportunities": [],
+  "splitItems": []
+}</pre>
+
+  <h2>Flutter App Changes</h2>
+  <ol>
+    <li>Changed the API base URL from localhost to the Droplet API:
+      <pre>http://164.92.194.34:7234/api</pre>
+    </li>
+    <li>Allowed Android cleartext HTTP traffic for the current Droplet test endpoint.</li>
+    <li>Added an Analytics repository that calls <code>/api/analytics</code>.</li>
+    <li>Reworked the Analytics page from hardcoded demo utility bills into a real energy telemetry dashboard.</li>
+  </ol>
+
+  <h2>Analytics Page Now Shows</h2>
+  <ul>
+    <li>Current live power in watts/kW.</li>
+    <li>kWh used in the last 24 hours.</li>
+    <li>kWh used in the last 30 days.</li>
+    <li>Estimated energy cost using a temporary <code>N$2.50/kWh</code> rate.</li>
+    <li>Voltage, current, imported kWh, peak power, average power, reading count, and last updated time.</li>
+  </ul>
+
+  <h2>Important Notes</h2>
+  <ul>
+    <li>The API is currently run manually with <code>dotnet run</code>. For production, create a systemd service so it starts after reboot.</li>
+    <li>The endpoint currently uses plain HTTP and port <code>7234</code>. For production, put it behind Nginx with HTTPS on port <code>443</code>.</li>
+    <li>The SQL password appeared in the old bridge script. Rotate it later and move secrets into environment variables.</li>
+    <li>The cost calculation uses a temporary rate of <code>N$2.50/kWh</code>. Replace it with the real tariff when available.</li>
+  </ul>
+
+  <h2>Useful Commands</h2>
+  <pre>cd /opt/adoven-api/AdovenApi
+export ADOVEN_SQL_PASSWORD="$(docker exec mssql printenv MSSQL_SA_PASSWORD)"
+dotnet run
+
+curl http://localhost:7234/api/analytics
+curl http://164.92.194.34:7234/api/analytics
+
+docker ps -a
+docker logs --tail 100 mqtt-bridge
+docker exec mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d AdovenDB -Q "SELECT TOP (5) * FROM EnergyData;"</pre>
+</body>
+</html>
